@@ -4,8 +4,8 @@ const axios = require("axios");
 const app = express();
 app.use(express.json());
 
-const CHANNEL_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const CHANNEL_ACCESS_TOKEN = "MF0W2sLvZHnGzYqC1TrKLCZUCtT/LJYO7jxuJyxa0PPXIKM8YW+dadnCzMoxNXowssHnRWEdFglFrKQ5vyvRqggxQtLbkrQUot/vLY3Uf5VKGGK/Oh/plIg5sHLs6aA/vKshB8q/kr0e/AcIHl/9iwdB04t89/1O/w1cDnyilFU=";
+const GROQ_API_KEY = "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";
 
 app.post("/webhook", async (req, res) => {
   const event = req.body.events?.[0];
@@ -18,7 +18,8 @@ app.post("/webhook", async (req, res) => {
         {
           model: "llama3-8b-8192",
           messages: [
-            { role: "system", content: "You are a helpful assistant." },
+          { role: "system", content: "あなたは親切な日本語アシスタントです。必ず日本語で答えてください。" },
+
             { role: "user", content: userText },
           ],
           temperature: 0.7,
