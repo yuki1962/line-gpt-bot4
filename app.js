@@ -1,58 +1,83 @@
 
 const express = require("express");
 const axios = require("axios");
+const fs = require("fs");
 const app = express();
 app.use(express.json());
 
-const CHANNEL_ACCESS_TOKEN = "MF0W2sLvZHnGzYqC1TrKLCZUCtT/LJYO7jxuJyxa0PPXIKM8YW+dadnCzMoxNXowssHnRWEdFglFrKQ5vyvRqggxQtLbkrQUot/vLY3Uf5VKGGK/Oh/plIg5sHLs6aA/vKshB8q/kr0e/AcIHl/9iwdB04t89/1O/w1cDnyilFU=";
-const GROQ_API_KEY = "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";
+const CHANNEL_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+const PORT = process.env.PORT || 3000;
+
+let expenses = []; // メモリ上で支出を保持
+
+// 支出をファイルに保存
+function saveExpenses() {
+    fs.writeFileSync("expenses.json", JSON.stringify(expenses));
+}
+
+// ファイルから支出を読み込む
+function loadExpenses() {
+    if (fs.existsSync("expenses.json")) {
+        expenses = JSON.parse(fs.readFileSync("expenses.json"));
+    }
+}
+
+loadExpenses();
 
 app.post("/webhook", async (req, res) => {
-  const event = req.body.events?.[0];
-  if (event?.message?.type === "text") {
-    try {
-      const userText = event.message.text;
+    const event = req.body.events[0];
+    if (event?.message?.type === "text") {
+        const text = event.message.text.trim();
+        let replyText = "";
 
-      const groqResp = await axios.post(
-        "https://api.groq.com/openai/v1/chat/completions",
-        {
-          model: "llama3-8b-8192",
-          messages: [
-           { role: "system", content: "あなたは親切な日本語アシスタントです。必ず日本語で答えてください。" },
-
-            { role: "user", content: userText },
-          ],
-          temperature: 0.7,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${GROQ_API_KEY}`,
-            "Content-Type": "application/json",
-          },
+        if (/^\D+\s+\d+$/.test(text)) {
+            // 支出登録
+            const [category, amount] = text.split(/\s+/);
+            expenses.push({
+                category,
+                amount: parseInt(amount, 10),
+                date: new Date().toLocaleDateString()
+            });
+            saveExpenses();
+            replyText = `「${category}」に${amount}円を登録しました。`;
+        } else if (text === "今日の合計は？") {
+            // 今日の合計
+            const today = new Date().toLocaleDateString();
+            const total = expenses
+                .filter(e => e.date === today)
+                .reduce((sum, e) => sum + e.amount, 0);
+            replyText = `今日の合計は ${total}円です。`;
+        } else if (text === "今日の支出は？") {
+            // 今日の支出リスト
+            const today = new Date().toLocaleDateString();
+            const todayExpenses = expenses.filter(e => e.date === today);
+            if (todayExpenses.length === 0) {
+                replyText = "今日はまだ支出がありません。";
+            } else {
+                replyText = todayExpenses
+                    .map(e => `${e.category}: ${e.amount}円`)
+                    .join("\n");
+            }
+        } else {
+            replyText = "支出を登録するには「カテゴリー 金額」と入力してください。\n例: 食費 1200\nまたは「今日の合計は？」と送信してください。";
         }
-      );
 
-      const replyText = groqResp.data.choices?.[0]?.message?.content ?? "返答がありません";
-
-      await axios.post(
-        "https://api.line.me/v2/bot/message/reply",
-        {
-          replyToken: event.replyToken,
-          messages: [{ type: "text", text: replyText }],
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${CHANNEL_ACCESS_TOKEN}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-    } catch (error) {
-      console.error("エラー:", error.response?.data || error.message);
+        // LINEに返信
+        await axios.post(
+            "https://api.line.me/v2/bot/message/reply",
+            {
+                replyToken: event.replyToken,
+                messages: [{ type: "text", text: replyText }]
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${CHANNEL_ACCESS_TOKEN}`,
+                    "Content-Type": "application/json"
+                }
+            }
+        );
     }
-  }
-  res.sendStatus(200);
+    res.sendStatus(200);
 });
 
-const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Running on ${PORT}`));
